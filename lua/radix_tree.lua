@@ -209,7 +209,7 @@ function _rescure_node(node, transform, prefixes)
     prefixes[#prefixes + 1] = node.label;
 
     if (node.value ~= nil) then
-        coroutine.yield(transform(node, prefixes))
+        coroutine.yield(transform(node, prefixes));
     end
 
     if (node.children ~= nil) then
@@ -223,36 +223,40 @@ function _rescure_node(node, transform, prefixes)
 end
 
 
-function _M.entries(self, prefix)
+function _M.wrap_rescure(self, prefix, type)
     return coroutine.wrap(function()
-        local _, node = self:match_node(prefix);
+        local _, node, _, _, ancestor_length = self:match_node(prefix);
+        local ancestor = prefix and prefix:sub(1, ancestor_length) or '';
 
         _rescure_node(node, function(node, prefixes)
-            return table.concat(prefixes), node.value;
+            local key = ancestor .. table.concat(prefixes);
+
+            if (type == 1) then -- entries
+                return key, node.value;
+
+            elseif (type == 2) then -- keys
+                return key;
+
+            else -- values
+                return node.value;
+            end
         end)
     end)
+end
+
+
+function _M.entries(self, prefix)
+    return self:wrap_rescure(prefix, 1);
 end
 
 
 function _M.keys(self, prefix)
-    return coroutine.wrap(function()
-        local match_exact, node = self:match_node(prefix);
-
-        _rescure_node(node, function(node, prefixes)
-            return table.concat(prefixes);
-        end)
-    end)
+    return self:wrap_rescure(prefix, 2);
 end
 
 
 function _M.values(self, prefix)
-    return coroutine.wrap(function()
-        local match_exact, node = self:match_node(prefix);
-
-        _rescure_node(node, function(node, prefixes)
-            return node.value;
-        end)
-    end)
+    return self:wrap_rescure(prefix, 3);
 end
 
 

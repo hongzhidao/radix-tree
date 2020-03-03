@@ -48,7 +48,7 @@ function test_insert()
 
     assert(tree:is_empty(), "begin with empty")
 
-    n = 100000;
+    n = 10000;
 
     for i = 1, n do
         local key = 'foo' .. i;
@@ -112,11 +112,13 @@ end
 function test_entries()
     local tree = radix_tree.new();
 
-    tree:insert('bar', 1);
-    tree:insert('zoo', 2);
-    tree:insert('foobar', 3);
+    tree:insert('ada', 1);
+    tree:insert('afoo', 2);
+    tree:insert('afooa', 3);
+    tree:insert('afooab', 4);
+    tree:insert('afooabc', 5);
 
-    local entries = tree:entries();
+    local entries = tree:entries('afoo');
 
     local n = 0;
     for key, value in entries do
@@ -124,7 +126,7 @@ function test_entries()
         n = n + 1;
     end
 
-    assert(n == 3, 'entries length');
+    assert(n == 4, 'entries length');
 end
 
 
