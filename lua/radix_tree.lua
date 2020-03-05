@@ -13,8 +13,8 @@ end
 
 
 function _find_node(parent, label)
-    local match_exact = false;
     local closest_child = nil;
+    local exact_match = false;
     local match_length = 0;
     local first_index = 1;
 
@@ -35,8 +35,8 @@ function _find_node(parent, label)
             end
 
             if i > 0 then
-                match_exact = (i == #node.label);
                 closest_child = node;
+                exact_match = (i == #node.label);
                 match_length = i;
                 first_index = middle_index;
                 break;
@@ -50,39 +50,56 @@ function _find_node(parent, label)
         end
     end
 
-    return match_exact, closest_child, match_length, first_index;
+    return closest_child, exact_match, match_length, first_index;
 end
 
 
 function _M.match_node(self, prefix)
     if not prefix or #prefix == 0 then
-        return true, self.root, 0, nil, 0, nil;
+        return self.root, true, nil, 0, 0, 1;
     end
 
-    local length = 0;
+    local ancestor_length = 0;
     local parent = self.root;
 
     while true do
-        local match_exact, child, match_length, index =
-                _find_node(parent, prefix:sub(length + 1));
+        local label = prefix:sub(ancestor_length + 1);
+        local child, exact_match, match_length, index = _find_node(parent, label);
 
-        if ((not match_exact)
-            or (length + #child.label >= #prefix))
+        if ((not exact_match)
+            or (ancestor_length + #child.label >= #prefix))
         then
-            return match_exact, child, match_length, parent, length, index;
+            return child, exact_match, parent, ancestor_length, match_length, index;
         end
 
         parent = child;
-        length = length + #child.label;
+        ancestor_length = ancestor_length + #child.label;
     end
 end
 
 
 function _M.insert(self, key, value)
-    local match_exact, closest_node, match_length, parent_node,
-          ancestor_length, closest_index = self:match_node(key); 
+    local closest_node, exact_match, parent_node,
+          ancestor_length, match_length, closest_index = self:match_node(key); 
 
-    if (match_exact) then
+    local label = key:sub(ancestor_length + 1);
+
+    if (not closest_node) then
+        if (not parent_node.children) then
+            parent_node.children = {};
+        end
+
+        local new_node = {
+            label = label,
+            value = value
+        };
+
+        table.insert(parent_node.children, closest_index, new_node);
+        self.size = self.size + 1;
+        return
+    end
+
+    if (exact_match) then
         local old = closest_node.value;
         closest_node.value = value;
 
@@ -93,45 +110,33 @@ function _M.insert(self, key, value)
         return old;
     end
 
-    if (not parent_node.children) then
-        parent_node.children = {};
-    end
+    local shared_prefix = label:sub(1, match_length);
+    local key_suffix = label:sub(match_length + 1);
+    local node_suffix = closest_node.label:sub(match_length + 1);
 
-    local label = key:sub(ancestor_length + 1);
-    local prefix = label:sub(1, match_length);
-    local suffix = label:sub(match_length + 1);
+    parent_node.children[closest_index] = {
+        label = shared_prefix,
+        value = value,
+        children = {
+            {
+                label = node_suffix,
+                value = closest_node.value,
+                children = closest_node.children
+            }
+        },
+    };
+    
+    if (#key_suffix > 0) then
+        parent_node.children[closest_index].value = nil;
 
-    if (not closest_node) then
-        local new_node = {
-            label = suffix,
+        local insert_node = {
+            label = key_suffix,
             value = value
         };
-
-        table.insert(parent_node.children, closest_index, new_node);
-
-    else
-        closest_node.label = closest_node.label:sub(match_length + 1);
     
-        if (#suffix == 0) then
-            parent_node.children[closest_index] = {
-                label = prefix,
-                value = value,
-                children = { closest_node }
-            };
-
-        else 
-            local insert_node = {
-                label = suffix,
-                value = value
-            }; 
-
-            parent_node.children[closest_index] = {
-                label = prefix,
-                children = closest_node.label < insert_node.label 
-                    and { closest_node, insert_node }
-                    or { insert_node, closest_node }
-            };
-        end
+        table.insert(parent_node.children[closest_index].children,
+                     (node_suffix < key_suffix) and 2 or 1, 
+                     insert_node);
     end
 
     self.size = self.size + 1;
@@ -139,9 +144,9 @@ end
 
 
 function _M.get(self, key)
-    local match_exact, node = self:match_node(key);
+    local node, exact_match = self:match_node(key);
 
-    return match_exact and node.value or nil;
+    return exact_match and node.value or nil;
 end
 
 
@@ -153,10 +158,10 @@ end
 
 
 function _M.remove(self, key)
-    local match_exact, closest_node, _, parent_node, _, closest_index = 
+    local closest_node, exact_match, parent_node, _, _, closest_index = 
             self:match_node(key);
 
-    if (not match_exact) then
+    if (not exact_match) then
         return;
     end
 
@@ -225,7 +230,7 @@ end
 
 function _M.wrap_rescure(self, prefix, type)
     return coroutine.wrap(function()
-        local _, node, _, _, ancestor_length = self:match_node(prefix);
+        local node, _, _, ancestor_length, _, _ = self:match_node(prefix);
         local ancestor = prefix and prefix:sub(1, ancestor_length) or '';
 
         _rescure_node(node, function(node, prefixes)

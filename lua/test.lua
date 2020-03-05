@@ -48,7 +48,7 @@ function test_insert()
 
     assert(tree:is_empty(), "begin with empty")
 
-    n = 10000;
+    n = 100000;
 
     for i = 1, n do
         local key = 'foo' .. i;
